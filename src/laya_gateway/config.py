@@ -35,6 +35,20 @@ def load_config(path: str | Path, environ: Mapping[str, str] | None = None) -> G
     for entry in entries:
         if not isinstance(entry, dict):
             raise ConfigError("worker entries must be tables")
+        allowed_fields = {
+            "id",
+            "base_url",
+            "api_key_env",
+            "tie_rank",
+            "expected_device",
+            "connect_timeout_seconds",
+            "read_timeout_seconds",
+        }
+        unexpected_fields = set(entry) - allowed_fields
+        if unexpected_fields:
+            raise ConfigError(
+                "unsupported worker fields: " + ", ".join(sorted(unexpected_fields))
+            )
         try:
             worker_id = entry["id"]
             base_url = entry["base_url"].rstrip("/")
@@ -47,6 +61,8 @@ def load_config(path: str | Path, environ: Mapping[str, str] | None = None) -> G
             raise ConfigError(f"invalid worker entry: {exc}") from exc
         if not isinstance(worker_id, str) or not worker_id.strip():
             raise ConfigError("worker id must be a non-empty string")
+        if len(worker_id) > 128 or not all(32 <= ord(character) < 127 for character in worker_id):
+            raise ConfigError("worker id must be at most 128 printable ASCII characters")
         parsed = urlparse(base_url)
         if (
             parsed.scheme not in {"http", "https"}
@@ -59,6 +75,8 @@ def load_config(path: str | Path, environ: Mapping[str, str] | None = None) -> G
             raise ConfigError(f"invalid base URL for {worker_id}")
         if not isinstance(api_key_env, str) or not api_key_env:
             raise ConfigError(f"api_key_env is required for {worker_id}")
+        if not isinstance(expected_device, str) or not expected_device.strip():
+            raise ConfigError(f"expected_device must be a non-empty string for {worker_id}")
         if not isinstance(tie_rank, int) or isinstance(tie_rank, bool) or tie_rank < 0:
             raise ConfigError(f"tie_rank must be a nonnegative integer for {worker_id}")
         if connect_timeout <= 0 or read_timeout <= 0:

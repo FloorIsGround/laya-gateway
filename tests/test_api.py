@@ -49,6 +49,11 @@ class FakeClient:
         return self.outcome
 
 
+class StartFailLedger(InMemoryLedger):
+    async def start_attempt(self, request_id, attempt_no, worker_id, instance_id):
+        raise RuntimeError("synthetic database failure")
+
+
 class Registry:
     def __init__(self, records):
         self.records = {record.config.id: record for record in records}
@@ -130,6 +135,19 @@ async def test_gateway_retries_definite_connect_failure_on_other_worker():
     assert response.headers["X-Laya-Attempts"] == "2"
     assert registry.failures == ["laya-primary"]
     assert len(next(iter(ledger.attempts.values()))) == 2
+
+
+@pytest.mark.anyio
+async def test_start_attempt_failure_releases_scheduler_lease():
+    worker = record("laya-secondary", 0, FakeClient(success("laya-secondary")))
+    registry = Registry([worker])
+    ledger = StartFailLedger()
+    scheduler = Scheduler(registry, queue_capacity=8, queue_timeout=0.1)
+    app = create_app(registry, scheduler, ledger)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        with pytest.raises(RuntimeError, match="synthetic database failure"):
+            await client.post("/v1/systemone", json={"state": "x", "questions": {}})
+    assert scheduler._reservations == {}
 
 
 @pytest.mark.anyio

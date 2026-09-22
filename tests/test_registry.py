@@ -89,6 +89,22 @@ async def test_registry_becomes_unhealthy_after_two_failures():
 
 
 @pytest.mark.anyio
+async def test_registry_requires_two_ready_probes_after_degraded_status():
+    degraded = BASE.model_copy(update={"status": "degraded"})
+    client = FakeClient([BASE, BASE, degraded, BASE, BASE])
+    registry = WorkerRegistry([(config(), client)])
+    await registry.probe_once("laya-primary")
+    await registry.probe_once("laya-primary")
+    assert registry.records["laya-primary"].state == "healthy"
+    await registry.probe_once("laya-primary")
+    assert registry.records["laya-primary"].state == "degraded"
+    await registry.probe_once("laya-primary")
+    assert registry.records["laya-primary"].state == "degraded"
+    await registry.probe_once("laya-primary")
+    assert registry.records["laya-primary"].state == "healthy"
+
+
+@pytest.mark.anyio
 async def test_registry_emits_worker_state_transitions():
     events = []
 

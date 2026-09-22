@@ -67,3 +67,12 @@ def test_load_config_allows_plain_http_for_loopback_worker(tmp_path: Path):
     path.write_text(VALID_TOML)
     config = load_config(path, {"KEY_PRIMARY": "a", "KEY_SECONDARY": "b"})
     assert config.workers[1].base_url == "http://127.0.0.1:8000"
+
+
+def test_load_config_rejects_direct_secret_fields(tmp_path: Path):
+    path = tmp_path / "workers.toml"
+    path.write_text(
+        VALID_TOML.replace('tie_rank = 0', 'tie_rank = 0\napi_key = "do-not-store-here"')
+    )
+    with pytest.raises(ConfigError, match="unsupported worker fields"):
+        load_config(path, {"KEY_PRIMARY": "a", "KEY_SECONDARY": "b"})

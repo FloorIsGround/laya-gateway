@@ -66,13 +66,15 @@ class WorkerRegistry:
             record.instance_changes += 1
         record.status = observed
         record.last_success = self.clock()
-        record.consecutive_successes += 1
         record.consecutive_failures = 0
         record.last_error = None
         if observed.status != "ready":
+            record.consecutive_successes = 0
             record.state = "degraded" if observed.status == "degraded" else "unknown"
-        elif record.consecutive_successes >= self.successes_to_healthy:
-            record.state = "healthy"
+        else:
+            record.consecutive_successes += 1
+            if record.consecutive_successes >= self.successes_to_healthy:
+                record.state = "healthy"
         await self._emit_state_change(record, prior_state, "status_probe")
 
     async def _emit_state_change(self, record: WorkerRecord, prior_state: str, reason: str) -> None:

@@ -170,7 +170,11 @@ def create_app(registry, scheduler: Scheduler, ledger, *, lifespan=None) -> Fast
             worker_id = worker.config.id
             excluded.add(worker_id)
             instance_id = worker.status.instance_id if worker.status else None
-            await ledger.start_attempt(request_id, attempts, worker_id, instance_id)
+            try:
+                await ledger.start_attempt(request_id, attempts, worker_id, instance_id)
+            except BaseException:
+                await lease.release()
+                raise
             started = time.monotonic()
             try:
                 result: UpstreamResult = await worker.client.infer(endpoint, payload, request_id)
