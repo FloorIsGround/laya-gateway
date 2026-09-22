@@ -1,0 +1,21 @@
+[Unit]
+Description=Laya routing and metering gateway
+Documentation=file:%h/projects/laya-gateway/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/projects/laya-gateway
+EnvironmentFile=%h/projects/laya-gateway/.env
+ExecStart=%h/projects/laya-gateway/.venv/bin/uvicorn laya_gateway.main:app --host 127.0.0.1 --port 8020 --workers 1 --no-access-log
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/projects/laya-gateway
+
+[Install]
+WantedBy=default.target
