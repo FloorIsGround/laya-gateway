@@ -34,8 +34,13 @@ The in-memory ledger is not suitable for accounting or production.
 Create a dedicated database and role, set `DATABASE_URL`, and apply migrations before starting the production service:
 
 ```bash
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/001_initial.sql
+DATABASE_URL="$DATABASE_URL" uv run python -m laya_gateway.db
 ```
+
+The migration runner records each applied SQL file and checksum in
+`schema_migrations`; it refuses to continue if an already-applied migration was
+edited. Use `TEST_DATABASE_URL` to run the isolated PostgreSQL integration test
+against a disposable database.
 
 The schema stores logical request IDs, per-worker attempts, timestamps, status codes, worker identity, latency, and usage totals. It does not contain request bodies, response bodies, prompts, answers, or API keys.
 
