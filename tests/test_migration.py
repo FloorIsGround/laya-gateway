@@ -9,7 +9,8 @@ def test_initial_migration_has_required_tables_and_no_payload_columns():
     assert "total_tokens" in sql
     assert "latency_ms" in sql
     assert "error_code" in sql
-    assert "unique (request_id, attempt_no)" in sql
+    assert "http_status" in sql
+    assert "unique (request_id, attempt_number)" in sql
     assert "request_body" not in sql
     assert "response_body" not in sql
     assert "api_key" not in sql

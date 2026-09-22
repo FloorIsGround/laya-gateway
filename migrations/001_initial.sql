@@ -5,7 +5,7 @@ CREATE TABLE gateway_requests (
     completed_at TIMESTAMPTZ,
     status TEXT NOT NULL DEFAULT 'received'
         CHECK (status IN ('received', 'succeeded', 'failed', 'unknown', 'unknown_after_restart')),
-    status_code INTEGER,
+    http_status INTEGER,
     selected_worker_id TEXT,
     input_tokens BIGINT CHECK (input_tokens >= 0),
     output_tokens BIGINT CHECK (output_tokens >= 0),
@@ -18,7 +18,7 @@ CREATE TABLE gateway_requests (
 CREATE TABLE gateway_attempts (
     attempt_id BIGSERIAL PRIMARY KEY,
     request_id UUID NOT NULL REFERENCES gateway_requests(request_id),
-    attempt_no INTEGER NOT NULL CHECK (attempt_no > 0),
+    attempt_number INTEGER NOT NULL CHECK (attempt_number > 0),
     worker_id TEXT NOT NULL,
     worker_instance_id UUID,
     started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -28,12 +28,12 @@ CREATE TABLE gateway_attempts (
             'started', 'succeeded', 'client_error', 'connect_failed',
             'upstream_failed', 'protocol_failed', 'unknown', 'unknown_after_restart'
         )),
-    status_code INTEGER,
+    http_status INTEGER,
     error_code TEXT,
     input_tokens BIGINT CHECK (input_tokens >= 0),
     output_tokens BIGINT CHECK (output_tokens >= 0),
     latency_ms BIGINT CHECK (latency_ms >= 0),
-    UNIQUE (request_id, attempt_no)
+    UNIQUE (request_id, attempt_number)
 );
 
 CREATE TABLE worker_state_events (

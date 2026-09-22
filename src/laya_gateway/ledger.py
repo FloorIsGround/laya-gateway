@@ -208,7 +208,7 @@ class PostgresLedger:
         async with self.pool.connection() as connection, connection.transaction():
             await connection.execute(
                 """INSERT INTO gateway_attempts
-                   (request_id, attempt_no, worker_id, worker_instance_id)
+                   (request_id, attempt_number, worker_id, worker_instance_id)
                    VALUES (%s, %s, %s, %s)""",
                 (request_id, attempt_no, worker_id, instance_id),
             )
@@ -232,10 +232,10 @@ class PostgresLedger:
         async with self.pool.connection() as connection:
             await connection.execute(
                 """UPDATE gateway_attempts SET
-                       completed_at = now(), status = %s, status_code = %s,
+                       completed_at = now(), status = %s, http_status = %s,
                        error_code = %s, input_tokens = %s, output_tokens = %s,
                        worker_instance_id = COALESCE(%s, worker_instance_id), latency_ms = %s
-                     WHERE request_id = %s AND attempt_no = %s""",
+                     WHERE request_id = %s AND attempt_number = %s""",
                 (
                     attempt_status,
                     status_code,
@@ -263,7 +263,7 @@ class PostgresLedger:
         async with self.pool.connection() as connection:
             await connection.execute(
                 """UPDATE gateway_requests SET
-                       completed_at = now(), status = %s, status_code = %s,
+                       completed_at = now(), status = %s, http_status = %s,
                        selected_worker_id = %s, input_tokens = %s, output_tokens = %s,
                        total_tokens = %s, latency_ms = %s, error_code = %s
                      WHERE request_id = %s""",
@@ -298,10 +298,10 @@ class PostgresLedger:
         async with self.pool.connection() as connection, connection.transaction():
             await connection.execute(
                 """UPDATE gateway_attempts SET
-                       completed_at = now(), status = %s, status_code = %s,
+                       completed_at = now(), status = %s, http_status = %s,
                        error_code = %s, input_tokens = %s, output_tokens = %s,
                        worker_instance_id = COALESCE(%s, worker_instance_id), latency_ms = %s
-                     WHERE request_id = %s AND attempt_no = %s""",
+                     WHERE request_id = %s AND attempt_number = %s""",
                 (
                     attempt_status,
                     status_code,
@@ -316,7 +316,7 @@ class PostgresLedger:
             )
             await connection.execute(
                 """UPDATE gateway_requests SET
-                       completed_at = now(), status = %s, status_code = %s,
+                       completed_at = now(), status = %s, http_status = %s,
                        selected_worker_id = %s, input_tokens = %s, output_tokens = %s,
                        total_tokens = %s, latency_ms = %s, error_code = %s
                      WHERE request_id = %s""",
