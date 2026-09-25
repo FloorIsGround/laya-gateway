@@ -40,6 +40,9 @@ class WorkerStatus(BaseModel):
     service_version: str
     laya_version: str
     model: str
+    max_context: StrictInt | None = Field(default=None, ge=256, le=8192)
+    head_max_length: StrictInt | None = Field(default=None, ge=1)
+    tokenizer_fingerprint: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     desired_device: str
     actual_device: str | None
     dtype: str | None

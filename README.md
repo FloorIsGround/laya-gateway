@@ -12,7 +12,28 @@ Internal FastAPI gateway for routing Laya inference requests across workers and 
 
 The gateway forwards only to workers that pass the authenticated worker-status protocol, report the configured identity/device, and remain fresh. Scheduling is least-loaded with deterministic tie rank. The supplied configuration gives `laya-primary` priority when both workers are equally idle.
 
+Before scheduling a valid request, the gateway counts each Laya question row
+using its bundled, pinned tokenizer. The longest untruncated row must fit a
+worker's reported `max_context`; the gateway retains the `laya-primary` tie preference
+for short requests, while longer requests can use only a capable worker.
+When that worker is busy, the request waits for it rather than falling back to
+a short worker that would truncate the state. Requests beyond all known
+capacities receive `422 context_too_long`. A matching tokenizer fingerprint is
+required for context-aware workers; older known Laya 0.3.4 workers remain
+eligible at 512 tokens only. Unknown or mismatched tokenizers are not eligible.
+Malformed requests are still validated by the worker, preserving its API errors.
+
+The tokenizer file in `src/laya_gateway/laya-tokenizer.json` is from the
+Apache-2.0 `convaiinnovations/laya` model revision
+`55cf4c4ebb4ebe31b2550e8bdf3bd21b99753851` (SHA-256
+`6c8aaa9a542084f2457eab775d4eeb51f92a70c0fd9de28d5edb0ddec3c08d30`).
+The gateway uses only the small Rust `tokenizers` runtime, not Torch or the
+model weights. Update the file and parity tests together if the worker tokenizer
+or Laya input formatter changes.
+
 A definite connection failure or explicit worker failure may be retried once on a different worker. Read timeouts and other ambiguous outcomes are recorded as unknown and are never retried.
+Retries use the same context eligibility filter, so an oversized request can
+never be sent to a fallback worker with a shorter window.
 
 ## Development
 

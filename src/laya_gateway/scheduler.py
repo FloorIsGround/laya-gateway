@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -71,10 +72,10 @@ class Scheduler:
             unreported = sum(acquired_at > worker.last_success for acquired_at in reservations.values())
         return reported + unreported
 
-    def _select(self, exclude: set[str]) -> WorkerRecord | None:
+    def _select(self, exclude: set[str], compatible: Callable[[WorkerRecord], bool]) -> WorkerRecord | None:
         candidates = []
         for worker in self.registry.eligible(exclude):
-            if worker.status is None:
+            if worker.status is None or not compatible(worker):
                 continue
             effective = self._effective_load(worker)
             if effective >= worker.status.capacity:
@@ -92,9 +93,13 @@ class Scheduler:
             return None
         return min(candidates, key=lambda item: item[:4])[4]
 
-    async def acquire(self, exclude: set[str] | None = None) -> WorkerLease:
+    async def acquire(
+        self,
+        exclude: set[str] | None = None,
+        compatible: Callable[[WorkerRecord], bool] = lambda _worker: True,
+    ) -> WorkerLease:
         excluded = exclude or set()
-        if not self.registry.eligible(excluded):
+        if not any(compatible(worker) for worker in self.registry.eligible(excluded)):
             raise NoEligibleWorkers("no eligible Laya workers")
         ticket = object()
         deadline = time.monotonic() + self.queue_timeout
@@ -105,7 +110,7 @@ class Scheduler:
             try:
                 while True:
                     if self._tickets[0] is ticket:
-                        selected = self._select(excluded)
+                        selected = self._select(excluded, compatible)
                         if selected is not None:
                             self._tickets.popleft()
                             reservation_id = object()
@@ -113,7 +118,7 @@ class Scheduler:
                             self._reservations.setdefault(worker_id, {})[reservation_id] = time.monotonic()
                             self._condition.notify_all()
                             return WorkerLease(self, selected, reservation_id)
-                        if not self.registry.eligible(excluded):
+                        if not any(compatible(worker) for worker in self.registry.eligible(excluded)):
                             raise NoEligibleWorkers("no eligible Laya workers")
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:

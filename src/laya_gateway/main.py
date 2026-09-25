@@ -10,6 +10,7 @@ import httpx
 
 from .api import create_app
 from .config import load_config
+from .context import ContextSizer
 from .ledger import InMemoryLedger, PostgresLedger
 from .registry import WorkerRegistry
 from .scheduler import Scheduler
@@ -60,6 +61,7 @@ def create_application():
         queue_capacity=_positive_int("GATEWAY_QUEUE_CAPACITY", 64),
         queue_timeout=_positive_float("GATEWAY_QUEUE_TIMEOUT_SECONDS", 30.0),
     )
+    context_sizer = ContextSizer()
 
     @asynccontextmanager
     async def lifespan(_app):
@@ -81,7 +83,7 @@ def create_application():
             await http.aclose()
             await ledger.close()
 
-    return create_app(registry, scheduler, ledger, lifespan=lifespan)
+    return create_app(registry, scheduler, ledger, lifespan=lifespan, context_sizer=context_sizer)
 
 
 app = create_application()

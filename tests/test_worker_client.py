@@ -59,6 +59,29 @@ async def test_probe_validates_identity_and_device():
 
 
 @pytest.mark.anyio
+async def test_probe_accepts_context_capabilities_and_rejects_bad_fingerprint():
+    context_status = {
+        **STATUS,
+        "max_context": 4096,
+        "head_max_length": 192,
+        "tokenizer_fingerprint": "a" * 64,
+    }
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=context_status))
+    ) as http:
+        observed = await WorkerClient(worker(), http).probe()
+    assert observed.max_context == 4096
+    assert observed.head_max_length == 192
+    assert observed.tokenizer_fingerprint == "a" * 64
+    context_status["tokenizer_fingerprint"] = "invalid"
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=context_status))
+    ) as http:
+        with pytest.raises(WorkerProtocolError):
+            await WorkerClient(worker(), http).probe()
+
+
+@pytest.mark.anyio
 async def test_probe_rejects_wrong_identity():
     bad = {**STATUS, "worker_id": "wrong"}
     async with httpx.AsyncClient(

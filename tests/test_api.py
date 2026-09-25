@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from laya_gateway.api import create_app
+from laya_gateway.context import ContextSizer
 from laya_gateway.ledger import InMemoryLedger
 from laya_gateway.models import UpstreamResult, Usage, WorkerConfig, WorkerStatus
 from laya_gateway.registry import WorkerRecord
@@ -93,7 +94,98 @@ def build_app(client_115, client_113):
     ])
     ledger = InMemoryLedger()
     scheduler = Scheduler(registry, queue_capacity=8, queue_timeout=0.1)
-    return create_app(registry, scheduler, ledger), registry, ledger
+    return create_app(registry, scheduler, ledger, context_sizer=ContextSizer()), registry, ledger
+
+
+def long_request(repetitions: int = 600):
+    return {
+        "state": "refund " * repetitions,
+        "questions": {
+            "route": {
+                "type": "choice",
+                "instructions": "Where?",
+                "criteria": {"billing": "payments", "support": "else"},
+            }
+        },
+    }
+
+
+@pytest.mark.anyio
+async def test_short_request_prefers_legacy_512_worker():
+    short = FakeClient(success("laya-primary"))
+    long = FakeClient(success("laya-secondary"))
+    app, _, _ = build_app(short, long)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/v1/systemone", json=long_request(10))
+    assert response.status_code == 200
+    assert response.headers["X-Laya-Worker-ID"] == "laya-primary"
+
+
+@pytest.mark.anyio
+async def test_long_request_uses_only_capable_worker():
+    short = FakeClient(success("laya-primary"))
+    long = FakeClient(success("laya-secondary"))
+    app, registry, _ = build_app(short, long)
+    registry.records["laya-secondary"].status.max_context = 4096
+    registry.records["laya-secondary"].status.head_max_length = 192
+    registry.records["laya-secondary"].status.tokenizer_fingerprint = ContextSizer().fingerprint
+    prepared = ContextSizer().prepare(long_request())
+    assert prepared is not None
+    assert 512 < prepared.lengths(192)[0] < 4096
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/v1/systemone", json=long_request())
+    assert response.status_code == 200
+    assert response.headers["X-Laya-Worker-ID"] == "laya-secondary"
+    assert short.calls == 0 and long.calls == 1
+
+
+@pytest.mark.anyio
+async def test_oversize_request_is_rejected_before_dispatch():
+    short = FakeClient(success("laya-primary"))
+    long = FakeClient(success("laya-secondary"))
+    app, registry, ledger = build_app(short, long)
+    registry.records["laya-secondary"].status.max_context = 4096
+    registry.records["laya-secondary"].status.head_max_length = 192
+    registry.records["laya-secondary"].status.tokenizer_fingerprint = ContextSizer().fingerprint
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/v1/systemone", json=long_request(5000))
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "context_too_long"
+    assert short.calls == long.calls == 0
+    assert ledger.requests == {}
+
+
+@pytest.mark.anyio
+async def test_busy_or_mismatched_long_worker_does_not_fall_back_to_512():
+    short = FakeClient(success("laya-primary"))
+    long = FakeClient(success("laya-secondary"))
+    app, registry, _ = build_app(short, long)
+    worker = registry.records["laya-secondary"]
+    worker.status.max_context = 4096
+    worker.status.head_max_length = 192
+    worker.status.tokenizer_fingerprint = "f" * 64
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/v1/systemone", json=long_request())
+    assert response.status_code == 503
+    assert short.calls == long.calls == 0
+
+
+@pytest.mark.anyio
+async def test_busy_long_worker_queues_instead_of_truncating_on_short_worker():
+    short = FakeClient(success("laya-primary"))
+    long = FakeClient(success("laya-secondary"))
+    app, registry, _ = build_app(short, long)
+    worker = registry.records["laya-secondary"]
+    worker.status.max_context = 4096
+    worker.status.head_max_length = 192
+    worker.status.tokenizer_fingerprint = ContextSizer().fingerprint
+    worker.status.inflight = worker.status.capacity
+    worker.status.executing = worker.status.capacity
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/v1/systemone", json=long_request())
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "gateway_queue_timeout"
+    assert short.calls == long.calls == 0
 
 
 @pytest.mark.anyio

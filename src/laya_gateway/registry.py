@@ -129,6 +129,8 @@ class WorkerRegistry:
                     "instance_id": str(status.instance_id) if status else None,
                     "actual_device": status.actual_device if status else None,
                     "capacity": status.capacity if status else None,
+                    "max_context": status.max_context if status else None,
+                    "head_max_length": status.head_max_length if status else None,
                     "inflight": status.inflight if status else None,
                     "last_error": record.last_error,
                 }

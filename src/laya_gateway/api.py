@@ -10,7 +10,9 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from .context import ContextSizer, PreparedRequest
 from .models import UpstreamResult
+from .registry import WorkerRecord
 from .scheduler import NoEligibleWorkers, QueueFull, QueueTimeout, Scheduler
 from .worker_client import (
     AmbiguousWorkerFailure,
@@ -55,7 +57,9 @@ def _is_loopback_client(request: Request) -> bool:
         return request.client.host.lower() == "localhost"
 
 
-def create_app(registry, scheduler: Scheduler, ledger, *, lifespan=None) -> FastAPI:
+def create_app(
+    registry, scheduler: Scheduler, ledger, *, lifespan=None, context_sizer: ContextSizer | None = None
+) -> FastAPI:
     app = FastAPI(title="Laya Gateway", version="0.1.0", lifespan=lifespan)
     app.state.registry = registry
     app.state.scheduler = scheduler
@@ -107,6 +111,47 @@ def create_app(registry, scheduler: Scheduler, ledger, *, lifespan=None) -> Fast
         if not isinstance(payload, dict):
             return _error(422, "invalid_request", "request body must be a JSON object")
 
+        prepared: PreparedRequest | None = (
+            await asyncio.to_thread(context_sizer.prepare, payload)
+            if context_sizer is not None else None
+        )
+        length_cache: dict[int, tuple[int, int]] = {}
+
+        def required(head_max_length: int) -> tuple[int, int]:
+            if head_max_length not in length_cache:
+                assert prepared is not None
+                length_cache[head_max_length] = prepared.lengths(head_max_length)
+            return length_cache[head_max_length]
+
+        def capacity(worker: WorkerRecord) -> tuple[int, int] | None:
+            status = worker.status
+            if status is None:
+                return None
+            if status.tokenizer_fingerprint is None:
+                # Pre-upgrade workers are only known safe at the default context.
+                if status.model == "convaiinnovations/laya" and status.laya_version == "0.3.4":
+                    return (512, 192)
+                return None
+            if context_sizer is None or status.tokenizer_fingerprint != context_sizer.fingerprint:
+                return None
+            if status.max_context is None or status.head_max_length is None:
+                return None
+            return status.max_context, status.head_max_length
+
+        def compatible(worker: WorkerRecord) -> bool:
+            if prepared is None:
+                return True  # Invalid shapes keep the worker's existing 422 response.
+            limits = capacity(worker)
+            return limits is not None and required(limits[1])[0] <= limits[0]
+
+        if prepared is not None:
+            capacities = [capacity(record) for record in registry.records.values()]
+            known = [limits for limits in capacities if limits is not None]
+            if known and len(known) == len(capacities) and all(
+                required(head)[0] > maximum for maximum, head in known
+            ):
+                return _error(422, "context_too_long", "request exceeds available context capacity")
+
         request_id = uuid4()
         request_started = time.monotonic()
         await ledger.create_request(request_id, endpoint)
@@ -115,7 +160,7 @@ def create_app(registry, scheduler: Scheduler, ledger, *, lifespan=None) -> Fast
 
         while attempts < 2:
             try:
-                lease = await scheduler.acquire(exclude=excluded)
+                lease = await scheduler.acquire(exclude=excluded, compatible=compatible)
             except NoEligibleWorkers:
                 latency = int((time.monotonic() - request_started) * 1000)
                 await ledger.finish_request(
