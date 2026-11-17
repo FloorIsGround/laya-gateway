@@ -10,11 +10,11 @@ Internal FastAPI gateway for routing Laya inference requests across workers and 
 - `GET /ready`
 - `GET /internal/backends`
 
-The gateway forwards only to workers that pass the authenticated worker-status protocol, report the configured identity/device, and remain fresh. Scheduling is least-loaded with deterministic tie rank. The supplied configuration gives `laya-primary` priority when both workers are equally idle.
+The gateway forwards only to workers that pass the authenticated worker-status protocol, report the configured identity/device, and remain fresh. Scheduling is least-loaded with deterministic tie rank. The example configuration gives `laya-primary` priority when both workers are equally idle.
 
 Before scheduling a valid request, the gateway counts each Laya question row
 using its bundled, pinned tokenizer. The longest untruncated row must fit a
-worker's reported `max_context`; the gateway retains the `laya-primary` tie preference
+worker's reported `max_context`; the gateway retains the configured tie preference
 for short requests, while longer requests can use only a capable worker.
 When that worker is busy, the request waits for it rather than falling back to
 a short worker that would truncate the state. Requests beyond all known
@@ -42,20 +42,35 @@ uv sync --group dev
 uv run pytest -q
 ```
 
-For local integration tests only, copy `.env.example`, set worker keys, and select the non-durable ledger:
+Prepare local configuration before starting the gateway:
 
 ```bash
-GATEWAY_LEDGER_MODE=memory uv run uvicorn laya_gateway.main:app --host 127.0.0.1 --port 8020
+cp config/workers.example.toml config/workers.toml
+cp .env.example .env
+chmod 600 .env
+```
+
+Set each worker's URL, `id`, and `expected_device` in `config/workers.toml`.
+The identity must match that worker's `LAYA_WORKER_ID`; the device must match
+its configured device (for example, `cpu` or `cuda`). Replace the API-key
+placeholders in `.env` with the corresponding workers' `LAYA_API_KEY` values.
+Both local configuration files are ignored by Git.
+
+For local integration tests only, select the non-durable ledger:
+
+```bash
+GATEWAY_LEDGER_MODE=memory uv run --env-file .env uvicorn laya_gateway.main:app --host 127.0.0.1 --port 8020
 ```
 
 The in-memory ledger is not suitable for accounting or production.
 
 ## PostgreSQL setup
 
-Create a dedicated database and role, set `DATABASE_URL`, and apply migrations before starting the production service:
+Create a dedicated database and role, set `DATABASE_URL` in `.env`, and apply
+migrations before starting the production service:
 
 ```bash
-DATABASE_URL="$DATABASE_URL" uv run python -m laya_gateway.db
+uv run --env-file .env python -m laya_gateway.db
 ```
 
 The migration runner records each applied SQL file and checksum in
@@ -67,9 +82,12 @@ The schema stores logical request IDs, per-worker attempts, timestamps, status c
 
 ## Configuration
 
-Worker identities and URLs are in `config/workers.toml`. API keys are indirect environment references and must not be placed in TOML or committed.
+Worker identities and URLs belong in the local `config/workers.toml`, copied
+from `config/workers.example.toml`. API keys are indirect environment references
+and must not be placed in TOML or committed.
 
-The initial worker URLs are private-LAN HTTP endpoints protected by independent
+The example URLs use placeholder hostnames; replace them with your own worker
+addresses. Plain HTTP is intended for a trusted LAN protected by independent
 worker API keys. Do not expose those ports outside the trusted LAN. TLS or a
 mutually authenticated service network should be added before crossing a trust
 boundary.
@@ -84,7 +102,10 @@ boundary.
 
 ## Service
 
-The included user unit binds `127.0.0.1:8020` and runs one gateway process so queue state and local in-flight counts remain authoritative.
+The included user unit assumes a checkout at `~/projects/laya-gateway`; adjust
+its paths if you clone elsewhere. It loads `.env`, binds `127.0.0.1:8020`, and
+runs one gateway process so queue state and local in-flight counts remain
+authoritative. Prepare the local configuration and database before starting it.
 
 ```bash
 install -Dm644 deploy/laya-gateway.service ~/.config/systemd/user/laya-gateway.service
@@ -93,3 +114,13 @@ systemctl --user enable --now laya-gateway.service
 ```
 
 Use PostgreSQL mode before exposing the service to real traffic.
+
+## License
+
+Copyright 2026 FloorIsGround. Original project code is licensed under the
+[Apache License, Version 2.0](LICENSE).
+
+The bundled Laya tokenizer is also distributed under Apache-2.0. Its source,
+pinned revision, checksum, and attribution are recorded in [NOTICE](NOTICE).
+Model weights are obtained separately by workers. Installed dependencies
+retain their respective licenses.

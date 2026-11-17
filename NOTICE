@@ -1,0 +1,29 @@
+Laya Gateway
+Copyright 2026 FloorIsGround
+
+This project is licensed under the Apache License, Version 2.0.
+The license text is provided in LICENSE.
+
+Bundled Laya tokenizer
+----------------------
+src/laya_gateway/laya-tokenizer.json contains the tokenizer distributed with
+convaiinnovations/laya by the Laya model contributors. The upstream model card
+identifies its license as Apache-2.0. The same license text is provided in
+LICENSE.
+
+Source repository: https://huggingface.co/convaiinnovations/laya
+Source revision: 55cf4c4ebb4ebe31b2550e8bdf3bd21b99753851
+Source path: tokenizer/tokenizer.json
+Source file:
+https://huggingface.co/convaiinnovations/laya/resolve/55cf4c4ebb4ebe31b2550e8bdf3bd21b99753851/tokenizer/tokenizer.json
+License declaration:
+https://huggingface.co/convaiinnovations/laya/blob/55cf4c4ebb4ebe31b2550e8bdf3bd21b99753851/README.md
+SHA-256: 6c8aaa9a542084f2457eab775d4eeb51f92a70c0fd9de28d5edb0ddec3c08d30
+
+The file was renamed to laya-tokenizer.json; its contents are unmodified.
+This provenance record was written for Laya Gateway. The pinned upstream
+repository does not supply a separate NOTICE file.
+
+The tokenizer is used to count inputs before routing requests to workers.
+Model weights are obtained separately by the worker service and are not
+included in this project.

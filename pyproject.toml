@@ -3,6 +3,8 @@ name = "laya-gateway"
 version = "0.1.0"
 description = "Internal routing and metering gateway for Laya workers"
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115,<1",
@@ -23,7 +25,7 @@ dev = [
 ]
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]

@@ -1,0 +1,7 @@
+include LICENSE NOTICE README.md .env.example .gitignore .python-version uv.lock
+include config/workers.example.toml
+recursive-include deploy *.service
+recursive-include migrations *.sql
+recursive-include tests *.py
+exclude .env config/workers.toml
+global-exclude *.py[cod]

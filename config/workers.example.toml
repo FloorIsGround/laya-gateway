@@ -1,0 +1,15 @@
+# Copy to workers.toml and set each worker's URL, identity, and device.
+# Keep API keys in the environment variables named below.
+[[workers]]
+id = "laya-primary"
+base_url = "http://worker-primary.example:8000"
+api_key_env = "LAYA_PRIMARY_API_KEY"
+tie_rank = 0
+expected_device = "cuda"
+
+[[workers]]
+id = "laya-secondary"
+base_url = "http://worker-secondary.example:8000"
+api_key_env = "LAYA_SECONDARY_API_KEY"
+tie_rank = 1
+expected_device = "cuda"
